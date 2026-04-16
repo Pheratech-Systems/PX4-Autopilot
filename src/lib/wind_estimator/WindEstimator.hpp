@@ -101,11 +101,11 @@ private:
 		INDEX_TAS_SCALE
 	};	///< enum which can be used to access state.
 
-	static constexpr float INITIAL_WIND_ERROR =
+	static constexpr float kInitialWindError =
 		2.5f; // initial uncertainty of each wind state when filter is initialised without airspeed [m/s]
-	static constexpr float INITIAL_BETA_ERROR_DEG =
+	static constexpr float kInitialBetaErrorDeg =
 		15.0f;	// sidelip uncertainty used to initialise the filter with a true airspeed measurement [deg]
-	static constexpr float INITIAL_HEADING_ERROR_DEG =
+	static constexpr float kInitialHeadingErrorDeg =
 		10.0f; // heading uncertainty used to initialise the filter with a true airspeed measurement [deg]
 
 	matrix::Vector3f _state{0.f, 0.f, 1.f};
@@ -119,12 +119,12 @@ private:
 
 	bool _initialised{false};	///< True: filter has been initialised
 
-	float _wind_psd{0.01f};	///< wind process noise power spectral density (m^2/s^4/Hz), (0.1 m/s^2/sqrt(Hz))^2
-	float _tas_scale_psd{1e-8f};	///< true airspeed scale process noise power spectral density (1/s^2/Hz), (0.0001 1/s/sqrt(Hz))^2
-	float _tas_var{1.96f};		///< true airspeed measurement noise variance (m/s)^2, (1.4 m/s)^2
-	float _beta_var{0.0225f};	///< sideslip measurement noise variance (rad)^2, (0.15 rad)^2
-	uint8_t _tas_gate{4};	///< airspeed fusion gate size (SD)
-	uint8_t _beta_gate{1};	///< sideslip fusion gate size (SD)
+	static constexpr float kWindPsd{0.01f};	///< wind process noise power spectral density (m^2/s^4/Hz), (0.1 m/s^2/sqrt(Hz))^2
+	static constexpr float kTasScalePsd{1e-8f};	///< true airspeed scale process noise power spectral density (1/s^2/Hz), (0.0001 1/s/sqrt(Hz))^2
+	static constexpr float kTasVar{1.96f};		///< true airspeed measurement noise variance (m/s)^2, (1.4 m/s)^2
+	static constexpr float kBetaVar{0.0225f};	///< sideslip measurement noise variance (rad)^2, (0.15 rad)^2
+	static constexpr uint8_t kTasGate{4};	///< airspeed fusion gate size (SD)
+	static constexpr uint8_t kBetaGate{1};	///< sideslip fusion gate size (SD)
 
 	float _scale_init{1.f};
 
