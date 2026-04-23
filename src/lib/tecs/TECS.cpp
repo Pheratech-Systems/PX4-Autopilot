@@ -251,8 +251,10 @@ void TECSControl::initialize(const Setpoint &setpoint, const Input &input, Param
 	ControlValues seb_rate{_calcPitchControlSebRate(weight, specific_energy_rate)};
 
 	const float pitch_min_energy_init = -param.min_sink_rate / math::max(input.tas, param.tas_min);
+	const float pitch_min_floor_init = math::max(param.pitch_min, pitch_min_energy_init);
+	const float effective_pitch_min_init = pitch_min_floor_init + param.fast_descend * (param.pitch_min - pitch_min_floor_init);
 	_pitch_setpoint = constrain(_calcPitchControlOutput(input, seb_rate, param, flag),
-				    math::max(param.pitch_min, pitch_min_energy_init), param.pitch_max);
+				    effective_pitch_min_init, param.pitch_max);
 
 	const STERateLimit limit{_calculateTotalEnergyRateLimit(param)};
 
@@ -433,8 +435,11 @@ void TECSControl::_calcPitchControl(float dt, const Input &input, const Specific
 
 	// Energy-consistent pitch floor: idle throttle absorbs at most min_sink_rate of descent.
 	// Pitching below this converts potential energy to kinetic, causing airspeed surges.
+	// In fast-descend that conversion is intentional, so the floor is linearly relaxed
+	// as fast_descend ramps from 0 to 1.
 	const float pitch_min_energy = -param.min_sink_rate / math::max(input.tas, param.tas_min);
-	const float effective_pitch_min = math::max(param.pitch_min, pitch_min_energy);
+	const float pitch_min_floor = math::max(param.pitch_min, pitch_min_energy);
+	const float effective_pitch_min = pitch_min_floor + param.fast_descend * (param.pitch_min - pitch_min_floor);
 
 	_calcPitchControlUpdate(dt, input, seb_rate, param, effective_pitch_min);
 	const float pitch_setpoint{_calcPitchControlOutput(input, seb_rate, param, flag)};
