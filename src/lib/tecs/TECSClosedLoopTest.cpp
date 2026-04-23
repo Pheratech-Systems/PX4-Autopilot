@@ -88,7 +88,7 @@ static constexpr float STE_RATE_MIN_ABS = MIN_SINK_RATE  * G;
 
 // --- Testing constants --------------------------------------------------------
 
-static constexpr float MAX_V_TRACKING_ERR = 0.5; ///< [m/s]
+static constexpr float MAX_V_TRACKING_ERR = 0.08; ///< [m/s]
 
 // --- Aircraft model -----------------------------------------------------------
 // pitch_cmd drives altitude rate instantly; all pitch-rate limiting comes from
