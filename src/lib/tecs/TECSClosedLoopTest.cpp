@@ -239,7 +239,7 @@ protected:
 	float run(float duration)
 	{
 		float peak_v_err = 0.f;
-		const int steps = static_cast<int>(duration / DT + 0.5f);
+		const int steps = static_cast<int>(std::lround(duration / DT));
 
 		FILE *csv = nullptr;
 		const char *log_dir = std::getenv("TECS_TEST_LOG_DIR");
@@ -291,7 +291,7 @@ protected:
 // and airspeed must not drift at all.  This exercises that the model and TECS
 // are self-consistent at the operating point.
 
-TEST_F(TECSClosedLoopTest, SteadyStateCruise_DefaultTuning)
+TEST_F(TECSClosedLoopTest, SteadyStateCruiseDefaultTuning)
 {
 	initAircraftState();
 	initParams();
@@ -304,7 +304,7 @@ TEST_F(TECSClosedLoopTest, SteadyStateCruise_DefaultTuning)
 	EXPECT_NEAR(_state.h, _alt_sp, 1e-5f);
 }
 
-TEST_F(TECSClosedLoopTest, SteadyStateCruise_HighSpeedWeight)
+TEST_F(TECSClosedLoopTest, SteadyStateCruiseHighSpeedWeight)
 {
 	initAircraftState();
 
@@ -320,7 +320,7 @@ TEST_F(TECSClosedLoopTest, SteadyStateCruise_HighSpeedWeight)
 	EXPECT_NEAR(_state.h, _alt_sp, 1e-5f);
 }
 
-TEST_F(TECSClosedLoopTest, SteadyStateCruise_LowSpeedWeight)
+TEST_F(TECSClosedLoopTest, SteadyStateCruiseLowSpeedWeight)
 {
 	initAircraftState();
 
@@ -341,7 +341,7 @@ TEST_F(TECSClosedLoopTest, SteadyStateCruise_LowSpeedWeight)
 // feedforward are identical (spe_weight = ske_weight = 1), so these tests pass
 // with either the old or new throttle implementation.
 
-TEST_F(TECSClosedLoopTest, AltitudeStepUp_DefaultTuning)
+TEST_F(TECSClosedLoopTest, AltitudeStepUpDefaultTuning)
 {
 	initAircraftState();
 	initParams();
@@ -356,7 +356,7 @@ TEST_F(TECSClosedLoopTest, AltitudeStepUp_DefaultTuning)
 	EXPECT_NEAR(_state.h, _alt_sp, 0.5f);
 }
 
-TEST_F(TECSClosedLoopTest, AltitudeStepDown_DefaultTuning)
+TEST_F(TECSClosedLoopTest, AltitudeStepDownDefaultTuning)
 {
 	initAircraftState();
 	initParams();
@@ -389,7 +389,7 @@ TEST_F(TECSClosedLoopTest, AltitudeStepDown_DefaultTuning)
 // The EXPECT_LT threshold (1.0 m/s) sits between the two regimes:
 // fails without the fix (~2-3 m/s), passes with it (~0.3 m/s).
 
-TEST_F(TECSClosedLoopTest, AltitudeStepUp_HighSpeedWeight)
+TEST_F(TECSClosedLoopTest, AltitudeStepUpHighSpeedWeight)
 {
 	initAircraftState();
 
@@ -406,7 +406,7 @@ TEST_F(TECSClosedLoopTest, AltitudeStepUp_HighSpeedWeight)
 	EXPECT_NEAR(_state.h, _alt_sp, 0.5f);
 }
 
-TEST_F(TECSClosedLoopTest, AltitudeStepDown_HighSpeedWeight)
+TEST_F(TECSClosedLoopTest, AltitudeStepDownHighSpeedWeight)
 {
 	initAircraftState();
 
@@ -424,7 +424,7 @@ TEST_F(TECSClosedLoopTest, AltitudeStepDown_HighSpeedWeight)
 	EXPECT_NEAR(_state.h, _alt_sp, 0.5f);
 }
 
-TEST_F(TECSClosedLoopTest, AltitudeStepUp_LowSpeedWeight)
+TEST_F(TECSClosedLoopTest, AltitudeStepUpLowSpeedWeight)
 {
 	initAircraftState();
 
@@ -441,7 +441,7 @@ TEST_F(TECSClosedLoopTest, AltitudeStepUp_LowSpeedWeight)
 	EXPECT_NEAR(_state.h, _alt_sp, 0.5f);
 }
 
-TEST_F(TECSClosedLoopTest, AltitudeStepDown_LowSpeedWeight)
+TEST_F(TECSClosedLoopTest, AltitudeStepDownLowSpeedWeight)
 {
 	initAircraftState();
 
@@ -461,7 +461,7 @@ TEST_F(TECSClosedLoopTest, AltitudeStepDown_LowSpeedWeight)
 
 
 
-TEST_F(TECSClosedLoopTest, AltitudeStepUp_LowAccel)
+TEST_F(TECSClosedLoopTest, AltitudeStepUpLowAccel)
 {
 	initAircraftState();
 
@@ -479,7 +479,7 @@ TEST_F(TECSClosedLoopTest, AltitudeStepUp_LowAccel)
 	EXPECT_NEAR(_state.h, _alt_sp, 0.5f);
 }
 
-TEST_F(TECSClosedLoopTest, AltitudeStepDown_LowAccel)
+TEST_F(TECSClosedLoopTest, AltitudeStepDownLowAccel)
 {
 	initAircraftState();
 
@@ -503,7 +503,7 @@ TEST_F(TECSClosedLoopTest, AltitudeStepDown_LowAccel)
 // Step the airspeed setpoint while holding altitude.  The throttle loop must
 // accelerate or decelerate the aircraft and then hold the new speed.
 
-TEST_F(TECSClosedLoopTest, AirspeedStepUp_DefaultTuning)
+TEST_F(TECSClosedLoopTest, AirspeedStepUpDefaultTuning)
 {
 	initAircraftState();
 
@@ -517,7 +517,7 @@ TEST_F(TECSClosedLoopTest, AirspeedStepUp_DefaultTuning)
 	EXPECT_NEAR(_state.h, _alt_sp, 0.5f);
 }
 
-TEST_F(TECSClosedLoopTest, AirspeedStepDown_DefaultTuning)
+TEST_F(TECSClosedLoopTest, AirspeedStepDownDefaultTuning)
 {
 	initAircraftState();
 
