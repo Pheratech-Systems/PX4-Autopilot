@@ -494,8 +494,8 @@ private:
 	 * @param specific_energy_rate is the calculated specific energy.
 	 * @param flag is the control flags.
 	 */
-	void _calcThrottleControl(float dt, const SpecificEnergyRates &specific_energy_rate, const Param &param,
-				  const Flag &flag);
+	void _calcThrottleControl(float dt, const SpecificEnergyRates &specific_energy_rate, float tas,
+				  const Param &param, const Flag &flag);
 
 	/**
 	 * @brief Calculate throttle control specific total energy
@@ -530,8 +530,8 @@ private:
 	 * @param flag is the control flags.
 	 * @return throttle setpoin in [0,1].
 	 */
-	float _calcThrottleControlOutput(const STERateLimit &limit, const ControlValues &ste_rate,
-					 float ste_rate_ff, const Param &param, const Flag &flag) const;
+	float _calcThrottleControlOutput(const STERateLimit &limit, const ControlValues &ste_rate, const Param &param,
+					 const Flag &flag) const;
 
 private:
 	// State
