@@ -250,7 +250,9 @@ void TECSControl::initialize(const Setpoint &setpoint, const Input &input, Param
 	const SpecificEnergyWeighting weight{_updateSpeedAltitudeWeights(param, flag)};
 	ControlValues seb_rate{_calcPitchControlSebRate(weight, specific_energy_rate)};
 
-	_pitch_setpoint = _calcPitchControlOutput(input, seb_rate, param, flag);
+	const float pitch_min_energy_init = -param.min_sink_rate / math::max(input.tas, param.tas_min);
+	_pitch_setpoint = constrain(_calcPitchControlOutput(input, seb_rate, param, flag),
+				    math::max(param.pitch_min, pitch_min_energy_init), param.pitch_max);
 
 	const STERateLimit limit{_calculateTotalEnergyRateLimit(param)};
 
@@ -429,7 +431,12 @@ void TECSControl::_calcPitchControl(float dt, const Input &input, const Specific
 	const SpecificEnergyWeighting weight{_updateSpeedAltitudeWeights(param, flag)};
 	ControlValues seb_rate{_calcPitchControlSebRate(weight, specific_energy_rates)};
 
-	_calcPitchControlUpdate(dt, input, seb_rate, param);
+	// Energy-consistent pitch floor: idle throttle absorbs at most min_sink_rate of descent.
+	// Pitching below this converts potential energy to kinetic, causing airspeed surges.
+	const float pitch_min_energy = -param.min_sink_rate / math::max(input.tas, param.tas_min);
+	const float effective_pitch_min = math::max(param.pitch_min, pitch_min_energy);
+
+	_calcPitchControlUpdate(dt, input, seb_rate, param, effective_pitch_min);
 	const float pitch_setpoint{_calcPitchControlOutput(input, seb_rate, param, flag)};
 
 	// Comply with the specified vertical acceleration limit by applying a pitch rate limit
@@ -437,7 +444,7 @@ void TECSControl::_calcPitchControl(float dt, const Input &input, const Specific
 	const float pitch_increment = dt * param.vert_accel_limit / math::max(input.tas, FLT_EPSILON);
 	_pitch_setpoint = constrain(pitch_setpoint, _pitch_setpoint - pitch_increment,
 				    _pitch_setpoint + pitch_increment);
-	_pitch_setpoint = constrain(_pitch_setpoint, param.pitch_min, param.pitch_max);
+	_pitch_setpoint = constrain(_pitch_setpoint, effective_pitch_min, param.pitch_max);
 
 	//Debug Output
 	_debug_output.energy_balance_rate_estimate = seb_rate.estimate;
@@ -470,7 +477,7 @@ TECSControl::ControlValues TECSControl::_calcPitchControlSebRate(const SpecificE
 }
 
 void TECSControl::_calcPitchControlUpdate(float dt, const Input &input, const ControlValues &seb_rate,
-		const Param &param)
+		const Param &param, float pitch_min_effective)
 {
 	if (param.integrator_gain_pitch > FLT_EPSILON) {
 
@@ -484,7 +491,7 @@ void TECSControl::_calcPitchControlUpdate(float dt, const Input &input, const Co
 		if (_pitch_setpoint >= param.pitch_max) {
 			pitch_integ_input = min(pitch_integ_input, 0.f);
 
-		} else if (_pitch_setpoint <= param.pitch_min) {
+		} else if (_pitch_setpoint <= pitch_min_effective) {
 			pitch_integ_input = max(pitch_integ_input, 0.f);
 		}
 

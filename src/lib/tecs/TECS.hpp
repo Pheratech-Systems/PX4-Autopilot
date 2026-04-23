@@ -473,7 +473,8 @@ private:
 	 * @param seb_rate is the specific energy balance rate in [m²/s³].
 	 * @param param is the control parameters.
 	 */
-	void _calcPitchControlUpdate(float dt, const Input &input, const ControlValues &seb_rate, const Param &param);
+	void _calcPitchControlUpdate(float dt, const Input &input, const ControlValues &seb_rate, const Param &param,
+				     float pitch_min_effective);
 
 	/**
 	 * @brief Calculate the pitch control output function.
