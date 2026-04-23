@@ -530,8 +530,8 @@ private:
 	 * @param flag is the control flags.
 	 * @return throttle setpoin in [0,1].
 	 */
-	float _calcThrottleControlOutput(const STERateLimit &limit, const ControlValues &ste_rate, const Param &param,
-					 const Flag &flag) const;
+	float _calcThrottleControlOutput(const STERateLimit &limit, const ControlValues &ste_rate,
+					 float ste_rate_ff, const Param &param, const Flag &flag) const;
 
 private:
 	// State

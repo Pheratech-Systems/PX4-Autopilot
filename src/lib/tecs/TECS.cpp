@@ -258,7 +258,11 @@ void TECSControl::initialize(const Setpoint &setpoint, const Input &input, Param
 
 	ControlValues ste_rate{_calcThrottleControlSteRate(limit, specific_energy_rate, param)};
 
-	_throttle_setpoint = _calcThrottleControlOutput(limit, ste_rate, param, flag);
+	const float ste_rate_ff = constrain(specific_energy_rate.spe_rate.setpoint * weight.spe_weighting
+					    + specific_energy_rate.ske_rate.setpoint * weight.ske_weighting
+					    + param.load_factor_correction * (param.load_factor - 1.f),
+					    limit.STE_rate_min, limit.STE_rate_max);
+	_throttle_setpoint = _calcThrottleControlOutput(limit, ste_rate, ste_rate_ff, param, flag);
 
 	// Debug output
 	_debug_output.total_energy_rate_estimate = ste_rate.estimate;
@@ -534,9 +538,14 @@ void TECSControl::_calcThrottleControl(float dt, const SpecificEnergyRates &spec
 		throttle_setpoint = param.throttle_min;
 
 	} else {
+		const SpecificEnergyWeighting weight{_updateSpeedAltitudeWeights(param, flag)};
+		const float ste_rate_ff = constrain(specific_energy_rates.spe_rate.setpoint * weight.spe_weighting
+						    + specific_energy_rates.ske_rate.setpoint * weight.ske_weighting
+						    + param.load_factor_correction * (param.load_factor - 1.f),
+						    limit.STE_rate_min, limit.STE_rate_max);
 		_calcThrottleControlUpdate(dt, limit, ste_rate, param, flag);
-		throttle_setpoint = (1.f - param.fast_descend) * _calcThrottleControlOutput(limit, ste_rate, param,
-				    flag) + param.fast_descend * param.throttle_min;
+		throttle_setpoint = (1.f - param.fast_descend) * _calcThrottleControlOutput(limit, ste_rate, ste_rate_ff,
+				    param, flag) + param.fast_descend * param.throttle_min;
 	}
 
 	// Rate limit the throttle demand
@@ -608,7 +617,7 @@ void TECSControl::_calcThrottleControlUpdate(float dt, const STERateLimit &limit
 }
 
 float TECSControl::_calcThrottleControlOutput(const STERateLimit &limit, const ControlValues &ste_rate,
-		const Param &param,
+		const float ste_rate_ff, const Param &param,
 		const Flag &flag) const
 {
 	// Calculate gain scaler from specific energy rate error to throttle
@@ -625,15 +634,17 @@ float TECSControl::_calcThrottleControlOutput(const STERateLimit &limit, const C
 	const float throttle_above_trim_per_ste_rate = (param.throttle_max - param.throttle_trim) / limit.STE_rate_max;
 	const float throttle_below_trim_per_ste_rate = (param.throttle_trim - param.throttle_min) / limit.STE_rate_min;
 
+	// Use the pitch-weight-scaled feedforward so throttle matches what the pitch loop actually demands.
+	// P+I error terms still use the unweighted ste_rate.setpoint for energy tracking.
 	float throttle_predicted = 0.0f;
 
-	if (ste_rate.setpoint >= FLT_EPSILON) {
+	if (ste_rate_ff >= FLT_EPSILON) {
 		// throttle is between trim and maximum
-		throttle_predicted = param.throttle_trim + ste_rate.setpoint * throttle_above_trim_per_ste_rate;
+		throttle_predicted = param.throttle_trim + ste_rate_ff * throttle_above_trim_per_ste_rate;
 
 	} else {
 		// throttle is between trim and minimum
-		throttle_predicted = param.throttle_trim - ste_rate.setpoint * throttle_below_trim_per_ste_rate;
+		throttle_predicted = param.throttle_trim - ste_rate_ff * throttle_below_trim_per_ste_rate;
 
 	}
 
