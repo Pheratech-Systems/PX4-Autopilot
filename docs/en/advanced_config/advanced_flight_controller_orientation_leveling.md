@@ -21,7 +21,7 @@ The other parameters can then be set in order to fine-tune the orientation of th
 You can locate the parameters in QGroundControl as shown below:
 
 1. Open QGroundControl menu: **Settings > Parameters > Sensor Calibration**.
-1. The parameters as located in the section as shown below (or you can search for them):
+2. The parameters as located in the section as shown below (or you can search for them):
 
    ![FC Orientation QGC v2](../../assets/qgc/setup/sensor/fc_orientation_qgc_v2.png)
 
