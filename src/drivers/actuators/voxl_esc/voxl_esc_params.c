@@ -57,6 +57,25 @@ PARAM_DEFINE_INT32(VOXL_ESC_CONFIG, 0);
 PARAM_DEFINE_INT32(VOXL_ESC_BAUD, 250000);
 
 /**
+ * UART ESC Serial Port
+ *
+ * Selects which serial port to use for the VOXL ESC driver.
+ *
+ * @group VOXL ESC
+ * @value 0 - GPS1
+ * @value 1 - TEL3
+ * @value 2 - Unused
+ * @value 3 - TEL4
+ * @value 4 - TEL2
+ * @value 5 - RC (default)
+ * @value 6 - TEL1
+ * @value 7 - GPS2
+ * @min 0
+ * @max 7
+ */
+PARAM_DEFINE_INT32(VOXL_ESC_PORT, 5);
+
+/**
  * Motor mappings for ModalAI ESC
  *
  *  HW Channel Idexes (PX4 Indexes) (note: silkscreen shows 0 indexed)

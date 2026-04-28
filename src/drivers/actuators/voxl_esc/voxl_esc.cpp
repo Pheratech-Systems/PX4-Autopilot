@@ -47,7 +47,7 @@ VoxlEsc::VoxlEsc() :
 	_mixing_output{"VOXL_ESC", VOXL_ESC_OUTPUT_CHANNELS, *this, MixingOutput::SchedulingPolicy::Auto, false, false},
 	_cycle_perf(perf_alloc(PC_ELAPSED, MODULE_NAME": cycle")),
 	_output_update_perf(perf_alloc(PC_INTERVAL, MODULE_NAME": output update interval")),
-	_battery(1, nullptr, _battery_report_interval, battery_status_s::SOURCE_POWER_MODULE)
+	_battery(2, nullptr, _battery_report_interval, battery_status_s::SOURCE_ESCS)
 {
 	_device = VOXL_ESC_DEFAULT_PORT;
 
@@ -120,6 +120,12 @@ int VoxlEsc::device_init()
 {
 	if (_device_initialized) {
 		return 0;
+	}
+
+	// Construct device path from parameter if default is used
+	if (strcmp(_device, VOXL_ESC_DEFAULT_PORT) == 0) {
+		snprintf(_device_path, sizeof(_device_path), "/dev/ttyS%lu", (unsigned long)_parameters.uart_device_id);
+		_device = _device_path;
 	}
 
 	// Open serial port
@@ -283,6 +289,7 @@ int VoxlEsc::load_params(voxl_esc_params_t *params, ch_assign_t *map)
 	param_get(param_find("VOXL_ESC_CONFIG"),  &params->config);
 	param_get(param_find("VOXL_ESC_MODE"),    &params->mode);
 	param_get(param_find("VOXL_ESC_BAUD"),    &params->baud_rate);
+	param_get(param_find("VOXL_ESC_PORT"), &params->uart_device_id);
 
 	param_get(param_find("VOXL_ESC_T_PERC"),  &params->turtle_motor_percent);
 	param_get(param_find("VOXL_ESC_T_DEAD"),  &params->turtle_motor_deadband);
@@ -350,6 +357,12 @@ int VoxlEsc::load_params(voxl_esc_params_t *params, ch_assign_t *map)
 	if (params->gpio_ctl_channel < 0 || params->gpio_ctl_channel > 6) {
 		PX4_ERR("Invalid parameter VOXL_ESC_GPIO_CH.  Please verify parameters.");
 		params->gpio_ctl_channel = 0;
+		ret = PX4_ERROR;
+	}
+
+	if (params->uart_device_id < 0 || params->uart_device_id > 7) {
+		PX4_ERR("Invalid parameter VOXL_ESC_PORT.  Please verify parameters (0-7).");
+		params->uart_device_id = 5;
 		ret = PX4_ERROR;
 	}
 
@@ -1614,6 +1627,7 @@ void VoxlEsc::print_params()
 	PX4_INFO("Params: VOXL_ESC_CONFIG: %" PRId32, _parameters.config);
 	PX4_INFO("Params: VOXL_ESC_MODE: %" PRId32, _parameters.mode);
 	PX4_INFO("Params: VOXL_ESC_BAUD: %" PRId32, _parameters.baud_rate);
+	PX4_INFO("Params: VOXL_ESC_PORT: %" PRId32, _parameters.uart_device_id);
 
 	PX4_INFO("Params: VOXL_ESC_FUNC1: %" PRId32, _parameters.function_map[0]);
 	PX4_INFO("Params: VOXL_ESC_FUNC2: %" PRId32, _parameters.function_map[1]);

@@ -159,6 +159,7 @@ private:
 		float		turtle_stick_minf{0.15f};
 		float		turtle_cosphi{0.99f};
 		int32_t		baud_rate{VOXL_ESC_DEFAULT_BAUD};
+		int32_t		uart_device_id{5};
 		int32_t		rpm_min{VOXL_ESC_DEFAULT_RPM_MIN};
 		int32_t		rpm_max{VOXL_ESC_DEFAULT_RPM_MAX};
 		int32_t		function_map[VOXL_ESC_OUTPUT_CHANNELS] {0, 0, 0, 0};
@@ -226,6 +227,9 @@ private:
 	int			update_params();
 	int			load_params(voxl_esc_params_t *params, ch_assign_t *map);
 	const char *board_id_to_name(int board_id);
+
+	static constexpr uint8_t DEVICE_PATH_BUF_SIZE = 32;
+	char			_device_path[DEVICE_PATH_BUF_SIZE];
 
 	bool			_turtle_mode_en{false};
 	int32_t			_rpm_turtle_min{0};
