@@ -68,7 +68,11 @@ private:
 
 	bool send() override
 	{
-		if (_mavlink->is_gcs_connected()) {
+		// Send STATUSTEXT to GCS, onboard controllers (companion computers), or any onboard-mode link
+		// The onboard mode check ensures companion computers receive status even before heartbeat detection
+		if (_mavlink->is_gcs_connected() ||
+		    _mavlink->telemetry_status().heartbeat_type_onboard_controller ||
+		    _mavlink->get_mode() == Mavlink::MAVLINK_MODE_ONBOARD) {
 			while (_mavlink_log_sub.updated() && (_mavlink->get_free_tx_buf() >= get_size())) {
 
 				const unsigned last_generation = _mavlink_log_sub.get_last_generation();
