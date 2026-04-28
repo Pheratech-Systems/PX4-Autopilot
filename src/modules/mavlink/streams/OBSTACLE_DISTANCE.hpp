@@ -49,7 +49,7 @@ public:
 
 	unsigned get_size() override
 	{
-		return _obstacle_distance_fused_sub.advertised() ? (MAVLINK_MSG_ID_OBSTACLE_DISTANCE_LEN +
+		return (_obstacle_distance_fused_sub.advertised() || _obstacle_distance_sub.advertised()) ? (MAVLINK_MSG_ID_OBSTACLE_DISTANCE_LEN +
 				MAVLINK_NUM_NON_PAYLOAD_BYTES) : 0;
 	}
 
@@ -57,12 +57,14 @@ private:
 	explicit MavlinkStreamObstacleDistance(Mavlink *mavlink) : MavlinkStream(mavlink) {}
 
 	uORB::Subscription _obstacle_distance_fused_sub{ORB_ID(obstacle_distance_fused)};
+	uORB::Subscription _obstacle_distance_sub{ORB_ID(obstacle_distance)};
 
 	bool send() override
 	{
 		obstacle_distance_s obstacle_distance;
 
-		if (_obstacle_distance_fused_sub.update(&obstacle_distance)) {
+		// Prefer fused data if available, otherwise use raw sensor data
+		if (_obstacle_distance_fused_sub.update(&obstacle_distance) || _obstacle_distance_sub.update(&obstacle_distance)) {
 			mavlink_obstacle_distance_t msg{};
 
 			msg.time_usec = obstacle_distance.timestamp;
