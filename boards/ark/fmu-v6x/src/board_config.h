@@ -326,6 +326,11 @@
 
 #define RC_SERIAL_PORT                     "/dev/ttyS5"
 
+/* VOXL ESC on GPS1 FOR airvolute carrier by default*/
+/* Airvolute carrier has GPS1 port, which maps to /dev/ttyS5 serial of the arkv6x*/
+/* By default this is usually the RC driver port, need to make sure that is turned off*/
+#define VOXL_ESC_DEFAULT_PORT        "/dev/ttyS5"
+
 /* Input Capture Channels. */
 #define INPUT_CAP1_TIMER                  1
 #define INPUT_CAP1_CHANNEL     /* T1C2 */ 2

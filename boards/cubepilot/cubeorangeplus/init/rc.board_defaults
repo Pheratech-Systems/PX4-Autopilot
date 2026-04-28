@@ -9,6 +9,12 @@ param set-default BAT2_V_DIV 10.1
 param set-default BAT1_A_PER_V 17
 param set-default BAT2_A_PER_V 17
 
+param set-default VOXL_ESC_CONFIG 1
+param set-default VOXL_ESC_FUNC1 101
+param set-default VOXL_ESC_FUNC2 102
+param set-default VOXL_ESC_FUNC3 103
+param set-default VOXL_ESC_FUNC4 104
+
 # Disable IMU thermal control
 param set-default SENS_EN_THERMAL 0
 
