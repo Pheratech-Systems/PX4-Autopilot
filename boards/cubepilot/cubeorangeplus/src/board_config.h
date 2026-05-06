@@ -105,7 +105,7 @@
 #define BOARD_ADC_OPEN_CIRCUIT_V     (5.6f)
 
 /* VOXL ESC on GPS1 by default (can be changed with -p parameter) */
-#define VOXL_ESC_DEFAULT_PORT        "/dev/ttyS2"
+#define VOXL_ESC_DEFAULT_PORT        "/dev/ttyS5"
 
 /* PWM */
 #define DIRECT_PWM_OUTPUT_CHANNELS  6

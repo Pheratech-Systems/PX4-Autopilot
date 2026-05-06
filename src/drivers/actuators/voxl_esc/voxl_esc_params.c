@@ -62,14 +62,14 @@ PARAM_DEFINE_INT32(VOXL_ESC_BAUD, 250000);
  * Selects which serial port to use for the VOXL ESC driver.
  *
  * @group VOXL ESC
- * @value 0 - GPS1
- * @value 1 - TEL3
- * @value 2 - Unused
- * @value 3 - TEL4
- * @value 4 - TEL2
- * @value 5 - RC (default)
- * @value 6 - TEL1
- * @value 7 - GPS2
+ * @value 0 - /dev/ttyS0
+ * @value 1 - /dev/ttyS1
+ * @value 2 - /dev/ttyS2
+ * @value 3 - /dev/ttyS3
+ * @value 4 - /dev/ttyS4
+ * @value 5 - /dev/ttyS5 (default)
+ * @value 6 - /dev/ttyS6
+ * @value 7 - /dev/ttyS7
  * @min 0
  * @max 7
  */
