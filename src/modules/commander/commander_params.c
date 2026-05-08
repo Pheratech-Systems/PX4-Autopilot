@@ -985,6 +985,21 @@ PARAM_DEFINE_INT32(COM_ARMABLE, 1);
 PARAM_DEFINE_FLOAT(COM_ARM_BAT_MIN, -1.f);
 
 /**
+ * Avionics 5V rail high voltage threshold
+ *
+ * Preflight check will fail if the 5V avionics rail voltage exceeds this threshold.
+ * Adjust for hardware that accepts a wider voltage range than the default 5.4V limit.
+ *
+ * @unit V
+ * @min 5.4
+ * @max 5.7
+ * @decimal 1
+ * @increment 0.1
+ * @group Commander
+ */
+PARAM_DEFINE_FLOAT(COM_POWER_V_HIGH, 5.4f);
+
+/**
  * Enable throw-start
  *
  * Allows to start the vehicle by throwing it into the air.

@@ -55,6 +55,7 @@ private:
 
 	DEFINE_PARAMETERS_CUSTOM_PARENT(HealthAndArmingCheckBase,
 					(ParamInt<px4::params::CBRK_SUPPLY_CHK>) _param_cbrk_supply_chk,
-					(ParamInt<px4::params::COM_POWER_COUNT>) _param_com_power_count
+					(ParamInt<px4::params::COM_POWER_COUNT>) _param_com_power_count,
+					(ParamFloat<px4::params::COM_POWER_V_HIGH>) _param_com_power_v_high
 				       )
 };

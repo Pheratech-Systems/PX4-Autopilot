@@ -83,7 +83,7 @@ void PowerChecks::checkAndReport(const Context &context, Report &reporter)
 			float avionics_power_rail_voltage = system_power.voltage5v_v;
 
 			const float low_error_threshold = 4.7f;
-			const float high_error_threshold = 5.4f;
+			const float high_error_threshold = _param_com_power_v_high.get();
 
 			const auto now = hrt_absolute_time();
 			_voltage_low_hysteresis.set_state_and_update(avionics_power_rail_voltage < low_error_threshold, now);
