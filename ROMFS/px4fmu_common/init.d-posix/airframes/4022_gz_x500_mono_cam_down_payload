@@ -1,0 +1,14 @@
+#!/bin/sh
+#
+# @name Gazebo x500 mono cam down with payload
+#
+# @type Quadrotor
+#
+
+PX4_SIM_MODEL=${PX4_SIM_MODEL:=x500_mono_cam_down_payload}
+
+. ${R}etc/init.d-posix/airframes/4001_gz_x500
+
+# Gripper machinery: type 0 = Servo enables it (this is already the default).
+# There is NO PD_GRIPPER_EN param — do not add one.
+param set-default PD_GRIPPER_TYPE 0

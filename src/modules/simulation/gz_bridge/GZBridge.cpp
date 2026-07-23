@@ -152,6 +152,12 @@ int GZBridge::init()
 		return PX4_ERROR;
 	}
 
+	// Must match the DetachableJoint system's default detach topic, which it builds as
+	// "/model/<runtime_model_name>/detachable_joint/detach". _model_name is the spawned
+	// instance name (e.g. x500_mono_cam_down_payload_0), so this stays unique per vehicle.
+	std::string detach_topic = "/model/" + _model_name + "/detachable_joint/detach";
+	_payload_detach_pub = _node.Advertise<gz::msgs::Empty>(detach_topic);
+
 	if (!_mixing_interface_esc.init(_model_name)) {
 		PX4_ERR("failed to init ESC output");
 		return PX4_ERROR;
@@ -822,6 +828,17 @@ void GZBridge::Run()
 		_mixing_interface_servo.updateParams();
 		_mixing_interface_wheel.updateParams();
 		_gimbal.updateParams();
+	}
+
+	gripper_s gripper;
+	if (_gripper_sub.update(&gripper)) {
+		if (gripper.command == gripper_s::COMMAND_RELEASE && !_payload_detached) {
+			gz::msgs::Empty msg;
+			if (_payload_detach_pub.Publish(msg)) {
+				_payload_detached = true;
+				PX4_INFO("Payload released");
+			}
+		}
 	}
 
 	ScheduleDelayed(10_ms);
