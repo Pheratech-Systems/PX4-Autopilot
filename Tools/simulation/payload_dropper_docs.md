@@ -270,9 +270,18 @@ python3 -u "${PX4_GZ_PAYLOAD_SCORER_SCRIPT}" --world "${PX4_GZ_WORLD}" \
 - World and carrier model come from the sim, so nothing is hardcoded to `tank` /
   `x500_mono_cam_down_payload_0` any more.
 - `--wait 60` covers the contact sensor not being advertised the instant the model
-  spawns; `--exit-with-sim` polls the world's `/clock` topic every 10 s and quits
-  after 2 misses, so the scorer never outlives the world (a GUI pause keeps the topic
-  advertised, so pausing is not mistaken for a dead sim).
+  spawns.
+- **Ctrl-C in the sim's terminal stops the scorer too.** This needs an explicit
+  `install_signal_handlers()` in the script: POSIX has a non-interactive `sh` set
+  `SIGINT`/`SIGQUIT` to `SIG_IGN` for *asynchronous* (`&`) jobs, and that disposition
+  survives `exec` — so without restoring the default the scorer ignores Ctrl-C and
+  keeps writing over the shell prompt that has already come back. It handles
+  `SIGINT`/`SIGTERM`/`SIGHUP` and exits silently (a farewell line would land on top of
+  the prompt).
+- `--exit-with-sim` is the backstop for a sim that dies *without* signalling us
+  (`pkill gz sim`, a crash): it polls the world's `/clock` topic every 3 s and quits
+  after 2 misses. Deliberately an "is the topic still advertised" check — a GUI-paused
+  sim publishes nothing but keeps its topics, so pausing is not mistaken for a dead sim.
 - Output goes to the PX4 console **and** `build/px4_sitl_default/rootfs/payload_impact_scorer_<instance>.log`,
   in PX4's own console format so it reads as part of the sim log:
 
@@ -327,6 +336,7 @@ python3 Tools/simulation/payload_release_pymavlink.py
 | CI format failure | astyle indentation | `make check_format` |
 | Can't drop twice in one session | `_payload_detached` latch + no `<attach_topic>` | restart the sim |
 | No HIT/MISS lines in the sim console | scorer not started (non-payload model name, or missing gz python bindings) | check the init log for `payload impact scorer`; `apt install python3-gz-transport13` |
+| `INFO [payload_scorer] …` lines printed over the shell prompt after Ctrl-C | background job of a non-interactive shell has `SIGINT` set to `SIG_IGN`, so only the `--exit-with-sim` poll could end it | `install_signal_handlers()` restores the default disposition — verify it's still called from `main()` |
 | Scorer still running after the sim is gone | started by hand without `--exit-with-sim` | it self-exits when auto-started; otherwise Ctrl-C it |
 
 ---
