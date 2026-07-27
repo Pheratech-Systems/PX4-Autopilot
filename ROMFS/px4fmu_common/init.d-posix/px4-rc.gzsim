@@ -33,6 +33,65 @@ get_gz_world() {
 	gz_world=$( ${gz_command} topic -l | grep -m 1 -e "^/world/.*/clock" | sed 's/\/world\///g; s/\/clock//g' )
 }
 
+# Payload drop scoring: for the *payload* airframes, run the impact scorer alongside
+# the sim so HIT/MISS (and the explosion VFX) need no extra terminal. See
+# Tools/simulation/payload_dropper_docs.md.
+#   PX4_GZ_PAYLOAD_SCORER=0            -> don't start it
+#   PX4_GZ_PAYLOAD_SCORER_ARGS="..."   -> replace the default "--explode" flags
+start_payload_scorer() {
+	model_instance="$1"
+
+	# Only the payload airframes carry something droppable.
+	case "${model_instance}" in
+	*payload*) ;;
+	*) return 0 ;;
+	esac
+
+	if [ "${PX4_GZ_PAYLOAD_SCORER:-1}" = "0" ]; then
+		echo "INFO  [init] payload impact scorer disabled (PX4_GZ_PAYLOAD_SCORER=0)"
+		return 0
+	fi
+
+	# In standalone/attach mode gz_env.sh was never sourced above, so the path is unset.
+	if [ -z "${PX4_GZ_PAYLOAD_SCORER_SCRIPT}" ]; then
+		if [ -f ./gz_env.sh ]; then
+			. ./gz_env.sh
+		elif [ -f ../gz_env.sh ]; then
+			. ../gz_env.sh
+		fi
+	fi
+
+	if [ ! -f "${PX4_GZ_PAYLOAD_SCORER_SCRIPT}" ]; then
+		echo "WARN  [init] payload impact scorer not found: ${PX4_GZ_PAYLOAD_SCORER_SCRIPT:-<PX4_GZ_PAYLOAD_SCORER_SCRIPT unset>}"
+		return 0
+	fi
+
+	if ! python3 -c "import gz.transport13" > /dev/null 2>&1; then
+		echo "WARN  [init] payload impact scorer skipped: no gz-transport13 python bindings (apt install python3-gz-transport13)"
+		return 0
+	fi
+
+	if command -v pgrep > /dev/null 2>&1 && \
+		pgrep -f "payload_impact_scorer.py.*--model ${model_instance}" > /dev/null 2>&1; then
+		echo "INFO  [init] payload impact scorer already running for ${model_instance}"
+		return 0
+	fi
+
+	scorer_log="payload_impact_scorer_${px4_instance}.log"
+	echo "INFO  [init] Starting payload impact scorer (log: $(pwd)/${scorer_log})"
+
+	# -u: unbuffered, so HIT/MISS reach the console as they happen.
+	# --wait: the contact sensor may not be advertised the instant the model spawns.
+	# --exit-with-sim: don't outlive the world we're scoring.
+	# shellcheck disable=SC2086 # PX4_GZ_PAYLOAD_SCORER_ARGS is a flag list, split on purpose
+	python3 -u "${PX4_GZ_PAYLOAD_SCORER_SCRIPT}" \
+		--world "${PX4_GZ_WORLD}" \
+		--model "${model_instance}" \
+		--wait 60 \
+		--exit-with-sim \
+		${PX4_GZ_PAYLOAD_SCORER_ARGS:---explode} 2>&1 | tee "${scorer_log}" &
+}
+
 # If not standalone
 if [ -z "${PX4_GZ_STANDALONE}" ]; then
 
@@ -166,6 +225,8 @@ if [ -n "${PX4_SIM_MODEL#*gz_}" ] && [ -z "${PX4_GZ_MODEL_NAME}" ]; then
 		echo "INFO  [init] Camera follow offset set to ${follow_x}, ${follow_y}, ${follow_z}"
 	fi
 
+	start_payload_scorer "${MODEL_NAME_INSTANCE}"
+
 elif [ -n "${PX4_GZ_MODEL_NAME}" ]; then
 	# Connect to existing model
 	echo "INFO  [init] PX4_GZ_MODEL_NAME set, PX4 will attach to existing model"
@@ -173,6 +234,8 @@ elif [ -n "${PX4_GZ_MODEL_NAME}" ]; then
 		echo "ERROR [init] gz_bridge failed to start and attach to existing model"
 		exit 1
 	fi
+
+	start_payload_scorer "${PX4_GZ_MODEL_NAME}"
 else
 	echo "ERROR [init] failed to pass either PX4_GZ_MODEL_NAME or PX4_SIM_MODEL"
 	exit 1

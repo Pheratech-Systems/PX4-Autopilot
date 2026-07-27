@@ -240,6 +240,91 @@ That is exactly what the shim publishes to (`/model/` + `_model_name` +
 
 ---
 
+## 8. Impact scoring — auto-started with the sim
+
+`Tools/simulation/gz/payload_impact_scorer.py` listens on the payload's contact
+sensor and prints `HIT`/`MISS` (+ miss distance from the tank), and with `--explode`
+spawns an explosion burst and a lingering fire at the impact point.
+
+It does **not** need its own terminal: `px4-rc.gzsim` starts it in the background
+right after the model is spawned, for any airframe whose model name matches
+`*payload*` (`x500_payload`, `x500_mono_cam_down_payload`). Two changes make that work:
+
+`src/modules/simulation/gz_bridge/gz_env.sh.in` — export the path:
+
+```sh
+export PX4_GZ_PAYLOAD_SCORER_SCRIPT=@PX4_SOURCE_DIR@/Tools/simulation/gz/payload_impact_scorer.py
+```
+
+`ROMFS/px4fmu_common/init.d-posix/px4-rc.gzsim` — a `start_payload_scorer()` helper
+(model-name gate, missing-bindings guard, duplicate guard) called with
+`${MODEL_NAME_INSTANCE}` at the end of the spawn branch and with
+`${PX4_GZ_MODEL_NAME}` in the attach branch. It launches:
+
+```sh
+python3 -u "${PX4_GZ_PAYLOAD_SCORER_SCRIPT}" --world "${PX4_GZ_WORLD}" \
+	--model "${model_instance}" --wait 60 --exit-with-sim \
+	${PX4_GZ_PAYLOAD_SCORER_ARGS:---explode} 2>&1 | tee "${scorer_log}" &
+```
+
+- World and carrier model come from the sim, so nothing is hardcoded to `tank` /
+  `x500_mono_cam_down_payload_0` any more.
+- `--wait 60` covers the contact sensor not being advertised the instant the model
+  spawns.
+- **Ctrl-C in the sim's terminal stops the scorer too.** This needs an explicit
+  `install_signal_handlers()` in the script: POSIX has a non-interactive `sh` set
+  `SIGINT`/`SIGQUIT` to `SIG_IGN` for *asynchronous* (`&`) jobs, and that disposition
+  survives `exec` — so without restoring the default the scorer ignores Ctrl-C and
+  keeps writing over the shell prompt that has already come back. It handles
+  `SIGINT`/`SIGTERM`/`SIGHUP` and exits silently (a farewell line would land on top of
+  the prompt).
+- `--exit-with-sim` is the backstop for a sim that dies *without* signalling us
+  (`pkill gz sim`, a crash): it polls the world's `/clock` topic every 3 s and quits
+  after 2 misses. Deliberately an "is the topic still advertised" check — a GUI-paused
+  sim publishes nothing but keeps its topics, so pausing is not mistaken for a dead sim.
+- Output goes to the PX4 console **and** `build/px4_sitl_default/rootfs/payload_impact_scorer_<instance>.log`,
+  in PX4's own console format so it reads as part of the sim log:
+
+  ```
+  INFO  [payload_scorer] world: tank, carrier: x500_mono_cam_down_payload_0
+  INFO  [payload_scorer] armed, scoring impacts (explosion VFX on)
+  INFO  [payload_scorer] re-armed: detach commanded, waiting for impact
+  INFO  [payload_scorer] HIT hull at (+7.05, +6.50, +1.30), peak Fz 0.6 N, against m1-abrams::body::hull_collision
+  INFO  [payload_scorer] detonated boom_1
+  INFO  [payload_scorer] ignited fire_1
+  ```
+
+  The `gz service` CLI echoes its Boolean reply, so `_create()` captures stdout rather
+  than letting `data: true` land in the console, and turns a failed spawn into
+  `WARN  [payload_scorer] failed to spawn fire_1: …`.
+
+Knobs:
+
+| Env var | Effect |
+|---|---|
+| `PX4_GZ_PAYLOAD_SCORER=0` | don't auto-start (run it by hand instead) |
+| `PX4_GZ_PAYLOAD_SCORER_ARGS="..."` | replace the default `--explode` flags (e.g. score-only: `PX4_GZ_PAYLOAD_SCORER_ARGS=" "`) |
+| `PX4_GZ_PAYLOAD_SCORER_SCRIPT` | override the script path |
+
+So the run-time workflow is three terminals, not four:
+
+```bash
+# 1) sim + scorer (scorer starts itself)
+PX4_GZ_WORLD=tank make px4_sitl gz_x500_mono_cam_down_payload
+# 2) QGroundControl — arm, take off, fly over the tank
+# 3) drop
+python3 Tools/simulation/payload_release_pymavlink.py
+```
+
+> `gz_env.sh.in` is a `configure_file` template: after editing it, plain
+> `make px4_sitl` may not regenerate `build/px4_sitl_default/rootfs/gz_env.sh` —
+> run `cmake build/px4_sitl_default` once.
+
+> The scorer needs `python3-gz-transport13`; without it the sim still starts and the
+> init log says `payload impact scorer skipped: no gz-transport13 python bindings`.
+
+---
+
 ## Troubleshooting quick-map
 
 | Symptom | Cause | Fix |
@@ -250,6 +335,9 @@ That is exactly what the shim publishes to (`/model/` + `_model_name` +
 | Gripper never acts | expected a `PD_GRIPPER_EN` param | it doesn't exist — use `PD_GRIPPER_TYPE 0` |
 | CI format failure | astyle indentation | `make check_format` |
 | Can't drop twice in one session | `_payload_detached` latch + no `<attach_topic>` | restart the sim |
+| No HIT/MISS lines in the sim console | scorer not started (non-payload model name, or missing gz python bindings) | check the init log for `payload impact scorer`; `apt install python3-gz-transport13` |
+| `INFO [payload_scorer] …` lines printed over the shell prompt after Ctrl-C | background job of a non-interactive shell has `SIGINT` set to `SIG_IGN`, so only the `--exit-with-sim` poll could end it | `install_signal_handlers()` restores the default disposition — verify it's still called from `main()` |
+| Scorer still running after the sim is gone | started by hand without `--exit-with-sim` | it self-exits when auto-started; otherwise Ctrl-C it |
 
 ---
 
