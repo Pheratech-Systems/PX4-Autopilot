@@ -1,0 +1,78 @@
+#!/bin/sh
+#
+# @name Gazebo x500 mono cam FPV
+#
+# @type Quadrotor
+#
+
+PX4_SIM_MODEL=${PX4_SIM_MODEL:=x500_mono_cam_fpv}
+
+. ${R}etc/init.d-posix/airframes/4001_gz_x500
+
+# The x500_mono_cam_fpv model raises motorConstant from 8.54858e-06 to 3.05e-05 while
+# keeping maxRotVelocity at 1000 rad/s, so SIM_GZ_EC_MIN/MAX inherited above still
+# bracket the commanded range. Max thrust goes 34.2 N -> 122.0 N against a 20.24 N
+# airframe: thrust-to-weight 1.69 -> 6.03.
+#
+# Hover omega = sqrt((20.244/4) / 3.05e-05) = 407 rad/s, and the ESC output is
+# linear in normalized thrust over [SIM_GZ_EC_MIN, SIM_GZ_EC_MAX] = [150, 1000],
+# so hover output = (407 - 150) / 850 = 0.30.
+param set-default MPC_THR_HOVER 0.30
+
+# Rate loop: available torque scaled by 122.0/34.2 = 3.57x while base_link inertia
+# is unchanged, so the PX4 defaults (tuned for a ~1.7:1 quad) would be ~3.6x too hot
+# and oscillate. Divide by 3 rather than 3.57 - that keeps a margin under the
+# equivalent-response point while still being crisper than stock x500.
+param set-default MC_ROLLRATE_P 0.05
+param set-default MC_ROLLRATE_I 0.07
+param set-default MC_ROLLRATE_D 0.001
+param set-default MC_PITCHRATE_P 0.05
+param set-default MC_PITCHRATE_I 0.07
+param set-default MC_PITCHRATE_D 0.001
+param set-default MC_YAWRATE_P 0.07
+param set-default MC_YAWRATE_I 0.03
+
+# Attitude loop can be stiffer than stock now that the rate loop tracks faster.
+param set-default MC_ROLL_P 9.0
+param set-default MC_PITCH_P 9.0
+param set-default MC_YAW_P 4.0
+
+# Rate limits. IMU_GYRO_RATEMAX is 800 Hz (rc.mc_defaults), which bounds how fast a
+# rate is worth commanding; 800 deg/s is the practical ceiling here.
+param set-default MC_ROLLRATE_MAX 800
+param set-default MC_PITCHRATE_MAX 800
+param set-default MC_YAWRATE_MAX 400
+param set-default MC_ACRO_R_MAX 800
+param set-default MC_ACRO_P_MAX 800
+param set-default MC_ACRO_Y_MAX 400
+
+# Airmode: keep roll/pitch/yaw torque authority at low collective thrust, which is
+# what makes sustained high-pitch descending flight controllable.
+param set-default MC_AIRMODE 2
+
+# This is the point of the airframe: the camera is pitched 45 deg up, so the useful
+# flight envelope is a nose-down attitude of the same order. 65 deg tilt needs
+# 20.244/cos(65) = 47.9 N, 39% of the 122 N available - comfortably inside.
+param set-default MPC_TILTMAX_AIR 65
+param set-default MPC_MAN_TILT_MAX 70
+param set-default MPC_MAN_Y_MAX 400
+
+# Speed envelope. MPC_XY_VEL_MAX and MPC_VEL_MANUAL are both capped at 20 m/s by
+# their parameter metadata, so 20 is the ceiling reachable without patching PX4.
+param set-default MPC_XY_VEL_MAX 20
+param set-default MPC_VEL_MANUAL 20
+param set-default MPC_XY_CRUISE 15
+param set-default MPC_Z_VEL_MAX_UP 8
+param set-default MPC_Z_VEL_MAX_DN 4
+
+# Acceleration/jerk: MPC_ACC_* are capped at 15 m/s^2 by their metadata.
+param set-default MPC_ACC_HOR 12
+param set-default MPC_ACC_HOR_MAX 15
+param set-default MPC_ACC_UP_MAX 12
+param set-default MPC_ACC_DOWN_MAX 10
+param set-default MPC_JERK_MAX 30
+param set-default MPC_JERK_AUTO 15
+
+# Waypoint acceptance radius of 2 m (rc.mc_defaults) makes a 20 m/s vehicle
+# overshoot and back up on every leg.
+param set-default NAV_ACC_RAD 5
