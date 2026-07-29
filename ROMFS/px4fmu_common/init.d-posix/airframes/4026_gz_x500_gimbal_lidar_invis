@@ -1,0 +1,15 @@
+#!/bin/sh
+#
+# @name Gazebo x500 with gimbal + lidar, airframe hidden from the camera
+#
+# @type Quadrotor
+#
+
+PX4_SIM_MODEL=${PX4_SIM_MODEL:=x500_gimbal_lidar_invis}
+
+# Same vehicle and same gimbal parameters as 4024_gz_x500_gimbal_lidar. The only
+# difference is the Gazebo model: it mounts model://gimbal_invis, whose camera does not
+# render the airframe, so the T-bar landing gear cannot occlude a detection. The legs
+# are still physically there (separate <collision> elements in x500_base), so landing
+# and the flight model are identical to 4024 — nothing here needs to change for it.
+. ${R}etc/init.d-posix/airframes/4024_gz_x500_gimbal_lidar

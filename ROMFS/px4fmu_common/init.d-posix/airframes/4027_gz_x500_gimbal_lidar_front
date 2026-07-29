@@ -1,0 +1,18 @@
+#!/bin/sh
+#
+# @name Gazebo x500 with gimbal + lidar, gimbal mounted forward
+#
+# @type Quadrotor
+#
+
+PX4_SIM_MODEL=${PX4_SIM_MODEL:=x500_gimbal_lidar_front}
+
+# Same vehicle and same gimbal parameters as 4024_gz_x500_gimbal_lidar. The only
+# difference is the Gazebo model: the gimbal sits 0.1 m further forward.
+#
+# KNOWN, MEASURED, NOT A BUG: this airframe jolts forward on takeoff. Moving the 0.4 kg
+# gimbal 0.1 m forward shifts CG 16.2 mm and PX4 is not told, so ~9.3% of hover thrust is
+# held as permanent pitch trim. It also only buys 0.3 deg of extra roll tolerance against
+# T-bar landing-gear occlusion. Kept as a separate airframe so 4024 stays clean.
+# For the occlusion problem, use 4026_gz_x500_gimbal_lidar_invis instead.
+. ${R}etc/init.d-posix/airframes/4024_gz_x500_gimbal_lidar
