@@ -1,0 +1,28 @@
+#!/bin/sh
+#
+# @name Gazebo x500 with gimbal + lidar + thermal camera
+#
+# @type Quadrotor
+#
+
+PX4_SIM_MODEL=${PX4_SIM_MODEL:=x500_gimbal_lidar_thermal}
+
+# Same vehicle and same gimbal parameters as 4024_gz_x500_gimbal_lidar. The only
+# difference is the Gazebo model: it adds model://thermal_cam on the gimbal
+# end-effector, co-boresighted with the existing RGB camera.
+#
+# The thermal camera is a deliberately negligible 1 g — the same stub mass the lidar on
+# that gimbal already uses — so it is not a dynamics input and nothing here needs
+# retuning. Contrast 4027_gz_x500_gimbal_lidar_front, which moved 0.4 kg of gimbal 0.1 m
+# forward without telling PX4 and does jolt on takeoff as a result.
+#
+# The thermal image does NOT reach PX4. gz_bridge has no thermal path, so there is no
+# uORB topic, no MAVLink stream and no parameter controlling it; the stream stays on gz
+# transport for a companion computer to read:
+#   /world/<world>/model/<vehicle>/model/thermal/link/thermal_camera_link/sensor/thermal_camera/image
+# It is 16-bit mono — decode as kelvin = pixel * 0.01, saturating at 655.35 K.
+#
+# Fly it against thermal_sar, which is the only world here containing heat sources.
+# Every other world is a flat ~288 K field where this camera shows nothing findable:
+#   PX4_GZ_WORLD=thermal_sar make px4_sitl gz_x500_gimbal_lidar_thermal
+. ${R}etc/init.d-posix/airframes/4024_gz_x500_gimbal_lidar
