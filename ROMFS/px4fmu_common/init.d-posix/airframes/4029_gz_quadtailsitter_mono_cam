@@ -1,0 +1,16 @@
+#!/bin/sh
+#
+# @name Quadrotor + Tailsitter + Monocular Camera
+#
+# @type VTOL Quad Tailsitter
+#
+
+PX4_SIM_MODEL=${PX4_SIM_MODEL:=quadtailsitter_mono_cam}
+
+. ${R}etc/init.d-posix/airframes/4018_gz_quadtailsitter
+
+# The mono_cam is a passive gz sensor. It publishes on gz transport as
+#   /world/<world>/model/<model_instance>/link/camera_link/sensor/camera/image
+# and is not bridged into uORB, so there is nothing for PX4 to configure here.
+# No camera params (MNT_*, TRIG_*, CAM_*) are set on purpose - this airframe has
+# no gimbal and no trigger wiring, only a fixed nose camera.
