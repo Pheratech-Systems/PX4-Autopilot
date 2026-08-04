@@ -288,11 +288,19 @@ python3 -u "${PX4_GZ_PAYLOAD_SCORER_SCRIPT}" --world "${PX4_GZ_WORLD}" \
   ```
   INFO  [payload_scorer] world: tank, carrier: x500_mono_cam_down_payload_0
   INFO  [payload_scorer] armed, scoring impacts (explosion VFX on)
+  INFO  [payload_scorer] run 20260803T142011Z, appending drop records to payload_impacts_x500_mono_cam_down_payload_0.jsonl
   INFO  [payload_scorer] re-armed: detach commanded, waiting for impact
-  INFO  [payload_scorer] HIT hull at (+7.05, +6.50, +1.30), peak Fz 0.6 N, against m1-abrams::body::hull_collision
+  INFO  [payload_scorer] HIT hull on m1-abrams at (+7.05, +6.50, +1.30), peak Fz 0.6 N, 1.78 m from m1-abrams
+  INFO  [payload_scorer] impact GPS 47.3980328, 8.5462432 (1.30 m AMSL)
   INFO  [payload_scorer] detonated boom_1
   INFO  [payload_scorer] ignited fire_1
   ```
+
+  The `impact GPS` line follows every scored drop, hit or miss, so a drop can be
+  eyeballed against a companion's GPS log or pasted into a map without converting by
+  hand. It is derived from the world origin at 7 decimal places (~1 cm); the metres on
+  the line above remain the authoritative measurement, and CEP is computed from those.
+  Worlds with no geodetic origin simply omit the line.
 
   The `gz service` CLI echoes its Boolean reply, so `_create()` captures stdout rather
   than letting `data: true` land in the console, and turns a failed spawn into
@@ -305,6 +313,170 @@ Knobs:
 | `PX4_GZ_PAYLOAD_SCORER=0` | don't auto-start (run it by hand instead) |
 | `PX4_GZ_PAYLOAD_SCORER_ARGS="..."` | replace the default `--explode` flags (e.g. score-only: `PX4_GZ_PAYLOAD_SCORER_ARGS=" "`) |
 | `PX4_GZ_PAYLOAD_SCORER_SCRIPT` | override the script path |
+
+---
+
+## 9. Drop records — the input to CEP
+
+Alongside the console lines the scorer appends one JSON object per drop to
+`build/px4_sitl_default/rootfs/payload_impacts_<carrier>.jsonl` (`--record PATH` to
+move it, `--record ''` to disable). **CEP is not computed here** — it is a statistic
+over ~20–30 drops, and the drop latch means one drop per sim run, so a CEP sample is
+always N processes appending to the same file. The scorer's job is to record truth;
+the analysis derives the metric.
+
+The record deliberately does **not** commit to a single "miss distance", because the
+reference depends on the question:
+
+| Reference | Answers | Why it isn't the default |
+|---|---|---|
+| Aimpoint | CEP | The scorer can't know it — see below |
+| Nearest target | Effect / lethality | Flatters the system: in `military_recon_mini`, aiming at `abrams_0` and landing on `abrams_2` scores ~0 m |
+| Struck target | nothing | Only defined on a HIT, and circular |
+
+So each record carries the impact point **and every target's truth pose at impact**,
+and the reference is chosen offline. Fields:
+
+```json
+{"schema":"payload_impact/1","run_id":"20260803T142011Z","drop_index":1,
+ "sim_time":128.44,"wall_time":1785793889.07,
+ "world":"military_recon_mini","carrier":"x500_mono_cam_down_payload_0",
+ "impact":{"x":30.4,"y":12.3,"z":1.3},"peak_force_z_n":0.6,
+ "outcome":"hit",
+ "struck":{"model":"abrams_1","part":"hull","collision":"abrams_1::body::hull_collision"},
+ "targets":[{"model":"abrams_0","x":8.0,"y":8.0,"z":-0.2,"q":[w,x,y,z],
+             "dx":22.4,"dy":4.3,"horiz":22.81,"downrange":22.4,"crossrange":4.3}, "..."],
+ "nearest":{"model":"abrams_1","horiz":0.50},
+ "aimpoint":null,"aim_error":null}
+```
+
+- **Miss distance is recorded on hits too.** A hit on the far edge of a hull is still
+  a ~3 m error; truncating those at the tank silhouette biases CEP low.
+- **`dx`/`dy`, not just `horiz`.** A constant offset (bias) and a spread (variance)
+  are different bugs. `downrange`/`crossrange` splits them further — release timing
+  and ballistics show up downrange, tracking and yaw error show up crossrange.
+- **`downrange` is along the target's local +X axis, not a ZYX yaw.** `tank.sdf`
+  includes `m1-abrams` with a 90° roll (`<pose>8 8 -0.2 1.57 0 0</pose>`) to stand the
+  mesh up, so its extracted yaw is 0 regardless of hull heading. The full quaternion
+  is in the record so the analysis can redo the projection if the convention changes.
+- **`sim_time`** is the join key against the ulog and the companion's tracking log.
+
+### Aimpoint, and why the scorer doesn't ask the tracker for it
+
+`--aim-model <name>` / `--aimpoint X,Y` stamp the intended target into each record,
+for **ballistics-only runs with no tracker in the loop**. With a tracker flying the
+drop, leave both unset and join its aimpoint log to these records by `sim_time`
+offline. The tracker is the system under test: if it is biased, its aimpoint and its
+own post-hoc estimate of where the payload landed share that bias, and it grades
+itself as accurate. Measurement has to come from an independent source — the contact
+sensor here, a survey/RTK mark in the field.
+
+When an aimpoint *is* declared, the record gains `aim_error` and a `misassigned`
+flag. Misassignment is reported as its own rate, never folded into CEP: a drop
+dead-centre on the wrong tank is a target-selection failure, and averaging it in as a
+0.3 m miss hides it completely.
+
+### Frames: metres are authoritative, lat/lon is a join convenience
+
+A companion computer logs the drop in **GPS**; the scorer measures it in the gz world
+frame in **metres**. They reconcile through the world's `<spherical_coordinates>`,
+which the scorer reads from the world SDF (there is no gz service to read it back,
+only `/world/<w>/set_spherical_coordinates`) and stamps into every record:
+
+```json
+"origin":{"lat":47.397971057728974,"lon":8.546163739800146,"elev":0.0,
+          "frame":"ENU","source":"tank.sdf"}
+```
+
+**Do not convert the Gazebo truth into GPS to compute CEP.** Two reasons:
+
+1. **You don't need to.** The scorer already has the impact point and the target's
+   true position in metres, and CEP *is* a distance in metres. Projecting truth into
+   degrees so the analysis can project it back into metres only loses precision and
+   adds a datum error to a number that was exact.
+2. **The conversion runs the other way.** Gazebo is truth; the companion's GPS is the
+   estimate under test. Bring the *estimate* into the truth frame, not truth into the
+   estimate's frame — otherwise the projection error ends up baked into the reference.
+
+So `x`/`y` stay authoritative and `lat`/`lon` are emitted alongside purely so a record
+lines up against a GPS-only log. `enu_to_geodetic()` uses the WGS84 meridional and
+prime-vertical radii rather than one spherical radius: at 47° they differ by ~0.17%,
+which is under a centimetre at 7 m but **12.7 cm at 100 m** — the wrong order of
+magnitude to ignore against a sub-metre CEP. Use the same model on the companion side.
+
+`--origin LAT,LON[,ELEV]` overrides discovery. A world with no
+`<spherical_coordinates>`, or one whose `world_frame_orientation` is not `ENU`, gets
+`"origin": null` and a warning rather than plausible-looking wrong coordinates.
+
+**Join key:** the companion's `t_utc_us` against the record's `wall_time` (both
+wall-clock UTC epoch). `sim_time` is the gz clock and does not track wall time under
+lockstep, so it joins to the ulog, not to a companion log.
+
+### Arming: only a commanded release counts as a drop
+
+The payload hangs below `base_link` and **rests on the ground plane while the drone is
+parked**, so a scorer that starts armed books that contact as a drop ~2.8 s into every
+run. It logs as a miss tens of metres out (21.5 m in the `tank` world), and one such
+outlier per sim start is enough to wreck a CEP sample — with one drop per run, half the
+records would be phantoms.
+
+So the scorer starts **disarmed** and arms on the detach command:
+
+```
+INFO  [payload_scorer] waiting for the detach command before scoring (pre-release ground contact is not a drop)
+INFO  [payload_scorer] armed: detach commanded, waiting for impact
+INFO  [payload_scorer] HIT hull on m1-abrams at (+6.91, +6.89, +1.30), peak Fz 131.7 N, 1.55 m from m1-abrams
+```
+
+The idle re-arm (`REARM_IDLE_SEC`) is disabled in this mode — it is what used to *mask*
+the phantom instead of preventing it, and it would also let a bounce or roll after
+touchdown book a second record for one release. If the detach subscription fails, the
+scorer falls back to the old arm-immediately behaviour and **warns** that records may
+contain phantom drops, rather than silently scoring nothing.
+
+Records with `"targets": []` are unusable for CEP (no truth pose, so no miss vector).
+The scorer warns at the time; drop them in analysis.
+
+### Multi-target worlds
+
+`--target-pattern` (default `abrams`) is a regex over model names, matching both
+`tank.sdf`'s bare `m1-abrams` include and `military_recon_mini.sdf`'s renamed
+`abrams_0` / `abrams_1` / `abrams_2`. The hit is attributed to a specific instance by
+taking the model segment of the scoped collision name
+(`abrams_1::body::hull_collision` → `abrams_1`) — the collision *suffix* is identical
+across every tank, so it alone cannot say which one was struck.
+
+`px4-rc.gzsim` needs no change for any of this: every added flag has a default, so the
+target-pattern fix applies to the auto-started scorer automatically. To override, put
+the flag in `PX4_GZ_PAYLOAD_SCORER_ARGS` — but note that variable *replaces* the
+default `--explode`, so pass both if you want VFX:
+
+```bash
+PX4_GZ_PAYLOAD_SCORER_ARGS="--explode --target-pattern pickup" \
+	PX4_GZ_WORLD=pickup make px4_sitl gz_x500_mono_cam_down_payload
+```
+
+### Which worlds this actually works in
+
+The scorer auto-starts for any `*payload*` model in **any** world, but what it can
+measure degrades in two tiers:
+
+| World | Miss vector / CEP | HIT/MISS label |
+|---|---|---|
+| `tank`, `tank_moving` (`m1-abrams`) | yes | yes |
+| `military_recon_mini` (`abrams_0/1/2`) | yes | yes |
+| `pickup`, `suv`, `hatchback`, `prius_hybrid` | yes, with `--target-pattern` | **no** |
+| `default`, `baylands`, `lawn`, … | no target at all | no |
+
+The split is that **miss distance is pose-based and portable, but hit classification
+is not.** `TARGETS` keys on `hull_collision` / `turret_collision`, which only
+`m1-abrams` defines — `pickup` and `suv` name theirs plain `collision`. Against those,
+a strike books as `outcome: "other"` with `struck: null`, while `targets[]`, `nearest`
+and the miss vector are all still correct, so CEP still computes. Add the model's
+collision suffix to `TARGETS` to get the label back.
+
+In a world with no matching target the record has `"targets": []` and the scorer warns
+that it is unusable for CEP.
 
 So the run-time workflow is three terminals, not four:
 
