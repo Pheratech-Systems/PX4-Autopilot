@@ -1,0 +1,14 @@
+#!/bin/sh
+# @name Rover Ackermann + Monocular Camera
+# @type Rover
+# @class Rover
+
+PX4_SIM_MODEL=${PX4_SIM_MODEL:=rover_ackermann_mono_cam}
+
+. ${R}etc/init.d-posix/airframes/4012_gz_rover_ackermann
+
+# The mono_cam is a passive gz sensor. It publishes on gz transport as
+#   /world/<world>/model/<model_instance>/link/camera_link/sensor/camera/image
+# and is not bridged into uORB, so there is nothing for PX4 to configure here.
+# No camera params (MNT_*, TRIG_*, CAM_*) are set on purpose - this airframe has
+# no gimbal and no trigger wiring, only a fixed forward-looking deck camera.
