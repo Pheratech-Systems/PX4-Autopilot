@@ -101,6 +101,7 @@ px4_add_romfs_files(
 	4028_gz_x500_gimbal_lidar_thermal
 	4029_gz_quadtailsitter_mono_cam
 	4030_gz_rover_ackermann_mono_cam
+	4031_gz_x500_depth_lidar_front
 
 	6011_gazebo-classic_typhoon_h480
 	6011_gazebo-classic_typhoon_h480.post

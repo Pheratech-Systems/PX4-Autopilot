@@ -1,0 +1,19 @@
+#!/bin/sh
+#
+# @name Gazebo x500 depth camera + forward lidar
+#
+# @type Quadrotor
+#
+
+PX4_SIM_MODEL=${PX4_SIM_MODEL:=x500_depth_lidar_front}
+
+# Same vehicle and same parameters as 4002_gz_x500_depth and 4017_gz_x500_lidar_front —
+# both of which are pure PX4_SIM_MODEL overrides on top of 4001_gz_x500. The only
+# difference here is the Gazebo model, which carries both sensors.
+#
+# Deliberately sets no extra params, to match those two airframes:
+#   - the lidar reaches PX4 as distance_sensor via gz_bridge's fixed lidar topic; it
+#     needs no SENS_* / EKF2_RNG_* enablement in SITL.
+#   - collision prevention (CP_DIST) is left off, as on 4017. Set it at runtime if you
+#     want the forward rangefinder to actually brake the vehicle.
+. ${R}etc/init.d-posix/airframes/4001_gz_x500
