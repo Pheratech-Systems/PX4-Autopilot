@@ -1,0 +1,17 @@
+#!/bin/sh
+#
+# @name Gazebo x500 full mono cam coverage
+#
+# @type Quadrotor
+#
+
+PX4_SIM_MODEL=${PX4_SIM_MODEL:=x500_full_mono_cams}
+
+# Five mono cameras (forward / aft / down / left / right). Like 4010_gz_x500_mono_cam
+# this is a pure PX4_SIM_MODEL override on 4001_gz_x500 and sets no params: the cameras
+# are consumed off gz transport by whatever is downstream, and none of them feeds a PX4
+# uORB topic, so there is nothing to enable on the PX4 side.
+#
+# The image topics carry an extra model/<name> level because the cameras are nested
+# includes — see the gz model's model.sdf for the full paths and the reason.
+. ${R}etc/init.d-posix/airframes/4001_gz_x500
