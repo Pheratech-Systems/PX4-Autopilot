@@ -497,6 +497,212 @@ python3 Tools/simulation/payload_release_pymavlink.py
 
 ---
 
+## 10. Triggered parachute
+
+A second rig, `x500_parachute_package` (airframe `4033`), drops a supply crate
+that **free-falls for a set time and then descends under a canopy**. The release
+path is unchanged — the same `MAV_CMD_DO_GRIPPER` → `payload_deliverer` →
+`gripper` uORB → `gz_bridge` → `detach` chain from section 1. Only what happens
+after separation is new.
+
+```
+detach  ──▶  DetachableJoint drops the payload      (unchanged)
+        └──▶ custom::ParachuteSystem starts a timer
+                 │  deploy_delay seconds of SIM time
+                 ▼
+             canopy inflates over open_time  ──▶  steady descent
+```
+
+### Why the canopy is attached the whole flight
+
+The canopy is a real link, jointed to the round from the moment the model loads.
+Nothing is spawned or jointed at runtime, and that is a constraint, not a
+preference:
+
+- gz-sim cannot create a joint between two independently spawned models from
+  outside a system plugin, and `DetachableJoint`'s `<attach_topic>` only
+  re-attaches a joint whose two ends both existed at load time.
+- `gz.msgs.EntityFactory` has a `pose` field but **no velocity field**, so a
+  canopy spawned mid-fall would start from rest and visibly stall.
+
+So what is gated is the **aerodynamics**, not the geometry. While stowed the
+canopy link has no collision and produces no force — it is 0.02 kg of dead mass
+that neither touches nor slows the vehicle.
+
+### Why the canopy mesh is a separate spawned model
+
+The canopy link deliberately carries **no `<visual>`**. The mesh lives in
+`model://parachute_canopy`, which the plugin spawns on deploy and then drives
+onto the canopy link's pose every update.
+
+The obvious alternative — keep the mesh in the payload and hide it until deploy —
+**does not work**: a runtime `Transparency` / `VisualCmd` change never reaches the
+gz-sim 8 renderer, so the canopy stays visible hanging off the drone for the
+whole flight. Creating the entity is the only way to change what is drawn that
+does not depend on renderer behaviour.
+
+**`parachute_canopy` is deliberately NOT `<static>`, even though it is only a
+visual.** gz-sim leaves static models out of `/world/<w>/dynamic_pose/info`,
+which is the per-iteration pose stream the GUI actually follows — they are
+assumed never to move. A static canopy therefore renders at the pose it spawned
+with and **hangs frozen in mid-air while the payload descends beneath it**, no
+matter how faithfully its `Pose` component is updated. Measured: with `<static>`
+the canopy moved 32.4 m in `pose/info` and was **absent from
+`dynamic_pose/info` entirely**.
+
+So it is a dynamic body made inert by construction instead — no collision,
+`<gravity>false</gravity>`, 1 g of mass — and the plugin drives it with
+`SetWorldPoseCmd` every update, which is the physics teleport path and keeps it
+in the dynamic stream. It is not jointed to the payload, so it exerts no force on
+the drop.
+
+> This is a good trap to remember when debugging anything that "moves in the ECM
+> but not on screen": check `dynamic_pose/info`, not `pose/info`. Verifying
+> against `pose/info` alone just reads back your own write.
+
+### Why not `gz-sim-lift-drag-system`
+
+Because it produces **exactly zero force at alpha = 90 degrees**, which is
+precisely where a canopy in vertical descent sits. It normalises with
+`while (fabs(alpha) > 0.5*PI) alpha -= PI`, so alpha collapses to ~0 and, since
+`cd = cda*alpha`, so does the drag coefficient. It is also a *stable* trap: drag
+acting at `cp` above the centre of mass is what holds the canopy upright, so a
+LiftDrag canopy aerodynamically parks itself on the singularity and free-falls at
+exactly `g` — with **no error or warning logged**. Measured Cd against the closed
+form: 0.399 at 20°, 0.883 at 45°, 1.473 at 75°, 1.658 at 85°, **0 at 90°**.
+
+`ParachuteSystem` therefore applies a plain quadratic drag,
+`F = -0.5*rho*cd*A*|v|*v`, at `<cp>`. The `<cp>` offset is what generates the
+restoring torque a real riser does.
+
+Two things about `<cp>` are load-bearing, and getting either wrong produces a
+payload that tumbles or a sim that diverges outright:
+
+- **It is measured from the canopy link's CENTRE OF MASS**, because
+  `AddWorldWrench` applies force at the centre of mass and the offset is then
+  added back as an explicit torque. So the canopy link's inertial pose must sit
+  at the link origin — put the centre of mass out at the canopy centroid *as
+  well* and the restoring torque is applied twice.
+- **Airspeed is evaluated at `cp`, not at the centre of mass** (`v + omega x arm`).
+  That term is the pendulum's only damping: as the canopy swings, its own motion
+  through the air opposes the swing, exactly as a real canopy does. Without it
+  the riser pendulum is undamped, and on a payload with realistic — i.e. small —
+  rotational inertia it winds up until the solver blows the model to ~1e7 m and
+  the server aborts.
+
+> The ported `model://parachute_small` and `model://parachute_package` (section
+> below) still use the stock LiftDrag system and carry a 5° frame tilt to dodge
+> the same singularity. They are the straight port of the gazebo-classic assets;
+> `mortar_chute` is the driven one.
+
+### Files
+
+| File | Role |
+|---|---|
+| `src/modules/simulation/gz_plugins/parachute/ParachuteSystem.{hpp,cpp}` | the gz-sim system: trigger state machine + drag |
+| `Tools/simulation/gz/models/crate_chute/` | **the payload in use**: crate + stowed canopy link + the plugin block (submodule) |
+| `Tools/simulation/gz/models/mortar_chute/` | same rig with a mortar round; adds a contact sensor so the impact scorer works (submodule) |
+| `Tools/simulation/gz/models/parachute_canopy/` | visual-only canopy, spawned on deploy (submodule) |
+
+Both payloads expose their body as a link called `link`, so swapping the
+`<uri>` in `x500_parachute_package` between `model://crate_chute` and
+`model://mortar_chute` is a one-line change and nothing else moves.
+
+**This rig is deliberately not scored, and the carrier's NAME is what does it.**
+`px4-rc.gzsim`'s `start_payload_scorer()` gates on
+`case "${model_instance}" in *payload*)` against the **carrier** model name, so
+calling the drone `x500_parachute_package` rather than `..._payload` skips the
+impact scorer silently — no env var to remember. The crate also has no contact
+sensor, which is the only thing the scorer subscribes to, so there would be
+nothing to score either way.
+
+> **The gate is on the carrier, not the payload.** Swapping `mortar_chute` back
+> in will **not** restore scoring while the drone is called `..._package` — the
+> mortar's contact sensor will publish and nobody will listen. To score again,
+> rename the carrier back to contain `payload`, or start
+> `payload_impact_scorer.py` by hand.
+
+> Don't confuse `x500_parachute_package` (this drone) with `parachute_package`
+> (the ported classic crate-under-canopy model). Unrelated; the drone has the
+> `x500_` prefix.
+| `Tools/simulation/gz/models/x500_parachute_package/` | carrier; `DetachableJoint` grabs `mortar_chute`'s `link` (submodule) |
+| `ROMFS/px4fmu_common/init.d-posix/airframes/4033_gz_x500_parachute_package` | airframe |
+
+The plugin is a **model** plugin, declared in `mortar_chute/model.sdf`, so unlike
+`OpticalFlowSystem`/`GstCameraSystem` it needs **no `server.config` entry**. It
+only has to be on `GZ_SIM_SYSTEM_PLUGIN_PATH`, which `gz_env.sh` already sets from
+`PX4_GZ_PLUGINS`.
+
+### Plugin parameters
+
+```xml
+<plugin filename="libParachuteSystem.so" name="custom::ParachuteSystem">
+  <canopy_link>canopy</canopy_link>       <!-- link the drag acts on (required) -->
+  <canopy_model>parachute_canopy</canopy_model>  <!-- spawned on deploy; empty = no mesh -->
+  <cd>1.75</cd>
+  <area>0.12</area>                       <!-- m^2 -->
+  <air_density>1.2041</air_density>
+  <cp>0 0 0.625</cp>                      <!-- aerodynamic centre, offset from the canopy link's CENTRE OF MASS -->
+  <deploy_delay>1.5</deploy_delay>        <!-- s of SIM time after release -->
+  <open_time>0.4</open_time>              <!-- inflation ramp, s -->
+  <!-- optional; both default to the top-level model name, so multi-vehicle
+       SITL does not cross-trigger:
+  <release_topic>/model/<carrier>/detachable_joint/detach</release_topic>
+  <deploy_topic>/model/<carrier>/parachute/deploy</deploy_topic> -->
+</plugin>
+```
+
+`release_topic` only **arms** the countdown. `deploy_topic` is a manual override
+that skips it — useful for exercising the canopy without flying a drop.
+
+Descent rate is `v = sqrt(2*m*g / (rho*cd*A))`. At the shipped numbers, with
+`detailed_mortar` at 0.1 kg plus the 0.02 kg canopy, that is **~3.05 m/s**.
+`detailed_mortar` is 0.1 kg "for easier sitl", not the 1.36 kg of a real 60 mm
+round — **if that mass ever changes, `<area>` has to move with it.**
+
+### Build and run
+
+```bash
+make px4_sitl gz_x500_parachute_package    # note: gz_<MODEL>, not gz_<airframe file>
+```
+
+Then take off and trigger the release exactly as in section 6:
+
+```bash
+python3 Tools/simulation/payload_release_pymavlink.py
+```
+
+Expect free fall for `deploy_delay`, then a visible canopy and a steady ~3 m/s
+descent. To watch the canopy without flying, publish the deploy topic directly:
+
+```bash
+gz topic -t /model/x500_parachute_package_0/parachute/deploy -m gz.msgs.Empty -p ""
+```
+
+### Verifying it outside PX4
+
+The models can be exercised standalone, which is how the numbers above were
+measured — spawn into any running world and simulate the release:
+
+```bash
+export GZ_SIM_RESOURCE_PATH=$PWD/Tools/simulation/gz/models
+export GZ_SIM_SYSTEM_PLUGIN_PATH=$PWD/build/px4_sitl_default/src/modules/simulation/gz_plugins
+gz sim -r -v 4 Tools/simulation/gz/worlds/default.sdf     # -v 4 or the plugin is silent
+
+gz service -s /world/default/create \
+  --reqtype gz.msgs.EntityFactory --reptype gz.msgs.Boolean --timeout 5000 \
+  --req 'sdf_filename: "model://mortar_chute", name: "drop1", pose: {position: {x: 0, y: 0, z: 60}}'
+
+gz topic -t /model/drop1/detachable_joint/detach -m gz.msgs.Empty -p ""
+```
+
+> **`-v 4` matters.** The plugin logs through `gzmsg`, which only prints at gz
+> verbosity 3+. PX4 launches the gz server at the default verbosity, so under
+> `make px4_sitl` the parachute is **silent even when working** — absence of
+> `[ParachuteSystem]` lines in the PX4 console is not evidence of a problem.
+
+---
+
 ## Troubleshooting quick-map
 
 | Symptom | Cause | Fix |
@@ -510,6 +716,13 @@ python3 Tools/simulation/payload_release_pymavlink.py
 | No HIT/MISS lines in the sim console | scorer not started (non-payload model name, or missing gz python bindings) | check the init log for `payload impact scorer`; `apt install python3-gz-transport13` |
 | `INFO [payload_scorer] …` lines printed over the shell prompt after Ctrl-C | background job of a non-interactive shell has `SIGINT` set to `SIG_IGN`, so only the `--exit-with-sim` poll could end it | `install_signal_handlers()` restores the default disposition — verify it's still called from `main()` |
 | Scorer still running after the sim is gone | started by hand without `--exit-with-sim` | it self-exits when auto-started; otherwise Ctrl-C it |
+| Canopy never opens, payload falls at `g`, no error logged | using stock `gz-sim-lift-drag-system` at alpha = 90° | that config produces exactly zero force — see section 10; use `ParachuteSystem`, or tilt the aero frame ~5° |
+| No `[ParachuteSystem]` lines under `make px4_sitl` | `gzmsg` needs gz verbosity 3+; PX4 runs the server at the default | expected — reproduce standalone with `gz sim -v 4` |
+| Payload drops off at spawn on the parachute rig | `DetachableJoint`'s `<child_link>` does not resolve | `mortar_chute` exposes `link`; `parachute_package` exposes `base_link` + `parachute_small::chute` instead |
+| Canopy visible while still on the drone | a `<visual>` was added back to `mortar_chute`'s canopy link | the mesh belongs in `model://parachute_canopy`; hiding a visual at runtime does not work in gz-sim 8 |
+| Canopy never appears at deploy | `model://parachute_canopy` not resolvable, or `<canopy_model>` empty | the plugin warns on a failed spawn; check `GZ_SIM_RESOURCE_PATH` |
+| Canopy hangs in the air while the payload descends under it | the canopy model was made `<static>` | static models are excluded from `dynamic_pose/info`, which is what the GUI follows — keep it dynamic with gravity off |
+| Descent far too slow / too fast | `<area>` no longer matches the payload mass | `v = sqrt(2mg/(rho*cd*A))`; `detailed_mortar` is 0.1 kg, not 1.36 kg |
 
 ---
 
@@ -530,6 +743,16 @@ On real hardware you instead:
 
 Items **2, 3, 6** (airframe params, airframe registration, MAVLink trigger) carry
 over unchanged.
+
+`custom::ParachuteSystem` (section 10) is **simulation-only** in the same sense:
+a real retarded munition deploys its chute from an onboard timer or a barometric
+lanyard on the payload itself, with nothing to command from the vehicle after
+separation. The `deploy_delay` parameter is the sim stand-in for that timer, so
+the flight-code path — release via `MAV_CMD_DO_GRIPPER` — is identical on
+hardware, and only the canopy physics is faked. Note that PX4's own `Parachute`
+output function (401, `FunctionParachute`) is **not** the hook for this: it is
+failsafe-only, returning -1 in normal flight and +1 as its default failsafe
+value, i.e. a vehicle-recovery chute, not a payload one.
 
 > Note: the `DetachableJoint` sim path bypasses the actuator/mixer output entirely
 > (uORB → shim → gz), so it validates command/mission logic but **not** the servo
