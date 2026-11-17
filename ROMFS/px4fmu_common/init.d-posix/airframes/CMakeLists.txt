@@ -104,6 +104,8 @@ px4_add_romfs_files(
 	4031_gz_x500_depth_lidar_front
 	4032_gz_x500_full_mono_cams
 	4033_gz_x500_parachute_package
+	4034_gz_x500_clearpath_sensors
+	4035_gz_rover_differential_clearpath_sensors
 
 	6011_gazebo-classic_typhoon_h480
 	6011_gazebo-classic_typhoon_h480.post

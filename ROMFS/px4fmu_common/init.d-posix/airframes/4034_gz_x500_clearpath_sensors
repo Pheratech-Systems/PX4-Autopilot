@@ -1,0 +1,13 @@
+#!/bin/sh
+#
+# @name Gazebo x500 with Clearpath sim sensors
+#
+# @type Quadrotor
+#
+# x500 with an Ouster OS1 lidar, a FLIR Blackfly camera and an Intel RealSense D435,
+# ported from Clearpath's simulator (models in Tools/simulation/gz/models).
+#
+
+PX4_SIM_MODEL=${PX4_SIM_MODEL:=x500_clearpath_sensors}
+
+. ${R}etc/init.d-posix/airframes/4001_gz_x500
